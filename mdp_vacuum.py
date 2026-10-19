@@ -1,8 +1,12 @@
 import math
+import random
+
 
 environment_matrix = [[0, 0, 0, 0], [0, "X", 0, 0], [0, 0, 0, 0], [0, -1, 0, 10]]
 
 directions = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+
+action_names = {(-1, 0): "North", (0, 1): "East", (1, 0): "South", (0, -1): "West"}
 
 def get_neighbors(row, col, max_rows = 4, max_cols = 4):
     neighbors = []
@@ -45,12 +49,13 @@ def expectimax(matrix, start=(0,3), depth=5, living_cost=-0.05): #depth of 5 eno
     path = [(current_row, current_col, current_val)]
 
     best_val = float("-inf")
+    best_action = None
 
     if current_val == 10 or current_val == -1:
-        return 0
+        return 0, None
 
     if depth == 0:
-        return 0
+        return 0, None
 
     for action in directions:
         expected_val = 0
@@ -62,11 +67,62 @@ def expectimax(matrix, start=(0,3), depth=5, living_cost=-0.05): #depth of 5 eno
                 future_val = 0
 
             else:
-                future_val = expectimax(matrix, start=next_outcome, depth=depth-1, living_cost=living_cost)
+                future_val, _ = expectimax(matrix, start=next_outcome, depth=depth-1, living_cost=living_cost)
 
             expected_val += probability * (living_cost + future_val + reward)
+        
+        if expected_val > best_val:
+            best_val, best_action = expected_val, action
 
-        best_val = max(best_val, expected_val)
-
-    return best_val
+    return best_val, best_action
     
+
+### -------Part 2: Reward Functions-------------------------
+
+def run_vacuum(matrix, start=(0, 3), depth=5, living_cost=-0.05, max_steps=30, seed=None):
+    if seed is not None:
+        random.seed(seed)
+    position = start
+    path = [position]
+    total_reward = 0
+
+    start_val, _ = expectimax(matrix, start, depth, living_cost)
+    print(f"\nLiving cost: {living_cost} | Start value: {start_val:.3f}")
+    print(f"Step 0: start at {position}")
+
+    for step in range(1, max_steps + 1):
+        q, action = expectimax(matrix, position, depth, living_cost)
+        outcomes = get_prob(matrix, position, action)
+        intended = outcomes[0][1]
+
+        roll, cumulative, new_pos = random.random(), 0, outcomes[-1][1]
+        for probability, nxt in outcomes:
+            cumulative += probability
+            if roll < cumulative:
+                new_pos = nxt
+                break
+
+        r, c = new_pos
+        total_reward += living_cost + matrix[r][c]
+        note = "as intended" if new_pos == intended else "SLIPPED"
+        print(f"Step {step}: at {position}, chose {action_names[action]} "
+              f"(value={q:.3f}) -> {new_pos} [{note}]")
+        position = new_pos
+        path.append(position)
+
+        if matrix[r][c] == 10:
+            print(f"Reached recharge station in {step} steps. Total reward: {total_reward:.2f}")
+            break
+        if matrix[r][c] == -1:
+            print(f"Fell into the trap in {step} steps. Total reward: {total_reward:.2f}")
+            break
+    else:
+        print("Max steps reached without finishing.")
+
+    print("Path:", " -> ".join(map(str, path)))
+    return path
+
+if __name__ == "__main__":
+    # changeable living costs
+    for lc in [-0.04, -0.5, -5.0]:
+        run_vacuum(environment_matrix, living_cost=lc, seed=42)
